@@ -214,8 +214,7 @@ class Decoder(nn.Module):
         """
         batch_size = probs.size(0)
         # idxs is [batch_size]
-        c = torch.distributions.Categorical(probs)
-        idxs = c.sample()
+        idxs = probs.multinomial().squeeze(1)
 
         # due to race conditions, might need to resample here
         for old_idxs in selections:
@@ -246,7 +245,7 @@ class Decoder(nn.Module):
             hyps = zip(*[beam[b].get_hyp(k) for k in ks[:n_best]])
             all_hyp += [hyps]
 
-        all_idxs = Variable(torch.LongTensor([[x for x in hyp] for hyp in all_hyp]).squeeze().unsqueeze(0))
+        all_idxs = Variable(torch.LongTensor([[x for x in hyp] for hyp in all_hyp]).squeeze())
 
         if all_idxs.dim() == 2:
             if all_idxs.size(1) > n_best:
