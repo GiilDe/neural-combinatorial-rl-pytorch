@@ -24,16 +24,16 @@ def reward(sample_solution, USE_CUDA=False):
     
     The output gets a reward of 4/5, or 0.8
 
-    The range is [1/sourceL, 1]
+    The range is [1/source_length, 1]
 
     Args:
-        sample_solution: list of len sourceL of [batch_size]
+        sample_solution: list of len source_length of [batch_size]
         Tensors
     Returns:
         [batch_size] containing trajectory rewards
     """
     batch_size = sample_solution[0].size(0)
-    sourceL = len(sample_solution)
+    source_length = len(sample_solution)
 
     longest = Variable(torch.ones(batch_size, 1), requires_grad=False)
     current = Variable(torch.ones(batch_size, 1), requires_grad=False)
@@ -42,7 +42,7 @@ def reward(sample_solution, USE_CUDA=False):
         longest = longest.cuda()
         current = current.cuda()
 
-    for i in range(1, sourceL):
+    for i in range(1, source_length):
         # compare solution[i-1] < solution[i] 
         res = torch.lt(sample_solution[i-1], sample_solution[i]) 
         # if res[i,j] == 1, increment length of current sorted subsequence
@@ -53,7 +53,7 @@ def reward(sample_solution, USE_CUDA=False):
         # if, for any, current > longest, update longest
         mask = torch.gt(current, longest)
         longest[mask] = current[mask]
-    return -torch.div(longest, sourceL)
+    return -torch.div(longest, source_length)
 
 def create_dataset(
         train_size,
@@ -121,8 +121,8 @@ def create_dataset(
 #    test_set.close()
     return train_fname, val_fname
 
-class SortingDataset(Dataset):
 
+class SortingDataset(Dataset):
     def __init__(self, dataset_fname):
         super(SortingDataset, self).__init__()
        
