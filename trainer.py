@@ -3,24 +3,25 @@
 import argparse
 import os
 from tqdm import tqdm
-
 import pprint as pp
 import numpy as np
 import tsp_task
 import torch
-print(torch.__version__)
 import torch.optim as optim
 from torch.optim import lr_scheduler
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
 from tensorboard_logger import configure, log_value
-
 from neural_combinatorial_rl import NeuralCombOptRL
 from plot_attention import plot_attention
 
 
+print(torch.__version__)
+
+
 def str2bool(v):
     return v.lower() in ('true', '1')
+
 
 parser = argparse.ArgumentParser(description="Neural Combinatorial Optimization with RL")
 
@@ -35,7 +36,8 @@ parser.add_argument('--hidden_dim', default=128, help='Dimension of hidden layer
 parser.add_argument('--n_process_blocks', default=3, help='Number of process block iters to run in the Critic network')
 parser.add_argument('--n_glimpses', default=2, help='No. of glimpses to use in the pointer network')
 parser.add_argument('--use_tanh', type=str2bool, default=True)
-parser.add_argument('--tanh_exploration', default=10, help='Hyperparam controlling exploration in the pointer net by scaling the tanh in the softmax')
+parser.add_argument('--tanh_exploration', default=10,
+                    help='Hyperparam controlling exploration in the pointer net by scaling the tanh in the softmax')
 parser.add_argument('--dropout', default=0., help='')
 parser.add_argument('--terminating_symbol', default='<0>', help='')
 parser.add_argument('--beam_size', default=1, help='Beam width for beam search')
@@ -47,7 +49,7 @@ parser.add_argument('--actor_lr_decay_step', default=5000, help='')
 parser.add_argument('--critic_lr_decay_step', default=5000, help='')
 parser.add_argument('--actor_lr_decay_rate', default=0.96, help='')
 parser.add_argument('--critic_lr_decay_rate', default=0.96, help='')
-parser.add_argument('--reward_scale', default=2, type=float,  help='')
+parser.add_argument('--reward_scale', default=2, type=float, help='')
 parser.add_argument('--is_train', type=str2bool, default=True, help='')
 parser.add_argument('--n_epochs', default=1, help='')
 parser.add_argument('--random_seed', default=24601, help='')
@@ -90,7 +92,6 @@ val_fname = tsp_task.create_dataset(problem_size=str(size), data_dir=data_dir)
 training_dataset = tsp_task.TSPDataset(train=True, size=size, num_samples=int(args['train_size']))
 val_dataset = tsp_task.TSPDataset(train=True, size=size, num_samples=int(args['val_size']))
 
-
 # Load the model parameters from a saved state
 if args['load_path'] != '':
     print('  [*] Loading model from {}'.format(args['load_path']))
@@ -119,26 +120,27 @@ else:
         args['is_train'],
         args['use_cuda'])
 
-
 save_dir = os.path.join(os.getcwd(),
-           args['output_dir'],
-           args['task'],
-           args['run_name'])
+                        args['output_dir'],
+                        args['task'],
+                        args['run_name'])
 
 try:
     os.makedirs(save_dir)
 except:
     pass
 
-#critic_mse = torch.nn.MSELoss()
-#critic_optim = optim.Adam(model.critic_net.parameters(), lr=float(args['critic_net_lr']))
+# critic_mse = torch.nn.MSELoss()
+# critic_optim = optim.Adam(model.critic_net.parameters(), lr=float(args['critic_net_lr']))
 actor_optim = optim.Adam(model.actor_net.parameters(), lr=float(args['actor_net_lr']))
 
 actor_scheduler = lr_scheduler.MultiStepLR(actor_optim,
-        range(int(args['actor_lr_decay_step']), int(args['actor_lr_decay_step']) * 1000,
-            int(args['actor_lr_decay_step'])), gamma=float(args['actor_lr_decay_rate']))
+                                           range(int(args['actor_lr_decay_step']),
+                                                 int(args['actor_lr_decay_step']) * 1000,
+                                                 int(args['actor_lr_decay_step'])),
+                                           gamma=float(args['actor_lr_decay_rate']))
 
-#critic_scheduler = lr_scheduler.MultiStepLR(critic_optim,
+# critic_scheduler = lr_scheduler.MultiStepLR(critic_optim,
 #        range(int(args['critic_lr_decay_step']), int(args['critic_lr_decay_step']) * 1000,
 #            int(args['critic_lr_decay_step'])), gamma=float(args['critic_lr_decay_rate']))
 
@@ -151,7 +153,7 @@ beta = args['critic_beta']
 
 if args['use_cuda']:
     model = model.cuda()
-    #critic_mse = critic_mse.cuda()
+    # critic_mse = critic_mse.cuda()
     critic_exp_mvg_avg = critic_exp_mvg_avg.cuda()
 
 step = 0
@@ -207,31 +209,31 @@ for i in range(epoch, epoch + int(args['n_epochs'])):
 
             # clip gradient norms
             torch.nn.utils.clip_grad_norm(model.actor_net.parameters(),
-                    float(args['max_grad_norm']), norm_type=2)
+                                          float(args['max_grad_norm']), norm_type=2)
 
             actor_optim.step()
             actor_scheduler.step()
 
             critic_exp_mvg_avg = critic_exp_mvg_avg.detach()
 
-            #critic_scheduler.step()
+            # critic_scheduler.step()
 
-            #R = R.detach()
-            #critic_loss = critic_mse(v.squeeze(1), R)
-            #critic_optim.zero_grad()
-            #critic_loss.backward()
+            # R = R.detach()
+            # critic_loss = critic_mse(v.squeeze(1), R)
+            # critic_optim.zero_grad()
+            # critic_loss.backward()
 
-            #torch.nn.utils.clip_grad_norm(model.critic_net.parameters(),
+            # torch.nn.utils.clip_grad_norm(model.critic_net.parameters(),
             #        float(args['max_grad_norm']), norm_type=2)
 
-            #critic_optim.step()
+            # critic_optim.step()
 
             step += 1
 
             if not args['disable_tensorboard']:
                 log_value('avg_reward', R.mean().data[0], step)
                 log_value('actor_loss', actor_loss.data[0], step)
-                #log_value('critic_loss', critic_loss.data[0], step)
+                # log_value('critic_loss', critic_loss.data[0], step)
                 log_value('critic_exp_mvg_avg', critic_exp_mvg_avg.data[0], step)
                 log_value('nll', nll.mean().data[0], step)
 
@@ -246,7 +248,7 @@ for i in range(epoch, epoch + int(args['n_epochs'])):
                     else:
                         example_output.append(action[0].data[0])  # <-- ?? 
                     example_input.append(sample_batch[0, :, idx][0])
-                #print('Example train input: {}'.format(example_input))
+                # print('Example train input: {}'.format(example_input))
                 print('Example train output: {}'.format(example_output))
 
     # Use beam search decoding for validation
@@ -262,7 +264,7 @@ for i in range(epoch, epoch + int(args['n_epochs'])):
     model.eval()
 
     for batch_id, val_batch in enumerate(tqdm(validation_dataloader,
-            disable=args['disable_progress_bar'])):
+                                              disable=args['disable_progress_bar'])):
         bat = Variable(val_batch)
 
         if args['use_cuda']:
@@ -286,15 +288,14 @@ for i in range(epoch, epoch + int(args['n_epochs'])):
                     example_output.append(action[0].data[0])
                 example_input.append(bat[0, :, idx].data[0])
             print('Step: {}'.format(batch_id))
-            #print('Example test input: {}'.format(example_input))
+            # print('Example test input: {}'.format(example_input))
             print('Example test output: {}'.format(example_output))
             print('Example test reward: {}'.format(R[0].data[0]))
-
 
             if args['plot_attention']:
                 probs = torch.cat(probs, 0)
                 plot_attention(example_input,
-                        example_output, probs.data.cpu().numpy())
+                               example_output, probs.data.cpu().numpy())
     print('Validation overall avg_reward: {}'.format(np.mean(avg_reward)))
     print('Validation overall reward var: {}'.format(np.var(avg_reward)))
 
@@ -307,7 +308,6 @@ for i in range(epoch, epoch + int(args['n_epochs'])):
 
         # If the task requires generating new data after each epoch, do that here!
         training_dataset = tsp_task.TSPDataset(train=True, size=size,
-            num_samples=int(args['train_size']))
+                                               num_samples=int(args['train_size']))
         training_dataloader = DataLoader(training_dataset, batch_size=int(args['batch_size']),
-            shuffle=True, num_workers=1)
-
+                                         shuffle=True, num_workers=1)

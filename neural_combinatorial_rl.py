@@ -1,12 +1,9 @@
 import torch
 import torch.nn as nn
-import torch.autograd as autograd
 from torch.autograd import Variable
 import torch.nn.functional as F
 import math
 import numpy as np
-
-from beam_search import Beam
 
 
 class Encoder(nn.Module):
@@ -26,21 +23,21 @@ class Encoder(nn.Module):
 
     def init_hidden(self, hidden_dim):
         """Trainable initial hidden state"""
-        enc_init_hx = Variable(torch.zeros(hidden_dim), requires_grad=False)
+        enc_init_hx = torch.zeros(hidden_dim, requires_grad=False)
         if self.use_cuda:
             enc_init_hx = enc_init_hx.cuda()
 
         # enc_init_hx.data.uniform_(-(1. / math.sqrt(hidden_dim)),
         #        1. / math.sqrt(hidden_dim))
 
-        enc_init_cx = Variable(torch.zeros(hidden_dim), requires_grad=False)
+        enc_init_cx = torch.zeros(hidden_dim, requires_grad=False)
         if self.use_cuda:
             enc_init_cx = enc_init_cx.cuda()
 
         # enc_init_cx = nn.Parameter(enc_init_cx)
         # enc_init_cx.data.uniform_(-(1. / math.sqrt(hidden_dim)),
         #        1. / math.sqrt(hidden_dim))
-        return (enc_init_hx, enc_init_cx)
+        return enc_init_hx, enc_init_cx
 
 
 class Attention(nn.Module):
@@ -54,30 +51,29 @@ class Attention(nn.Module):
         self.C = C  # tanh exploration
         self.tanh = nn.Tanh()
 
-        v = torch.FloatTensor(dim)
+        v = torch.tensor(dim, dtype=torch.float64)
         if use_cuda:
             v = v.cuda()
-        self.v = nn.Parameter(v)
+        self.v = nn.Parameter(v, requires_grad=True)
         self.v.data.uniform_(-(1. / math.sqrt(dim)), 1. / math.sqrt(dim))
 
     def forward(self, query, ref):
         """
         Args: 
             query: is the hidden state of the decoder at the current
-                time step. batch x dim
+                time step. batch, dim
             ref: the set of hidden states from the encoder. 
-                source_length x batch x hidden_dim
+                source_length, batch, hidden_dim
         """
-        # ref is now [batch_size x hidden_dim x source_length]
+        # ref is now [batch_size, hidden_dim, source_length]
         ref = ref.permute(1, 2, 0)
-        q = self.project_query(query).unsqueeze(2)  # batch x dim x 1
-        e = self.project_ref(ref)  # batch_size x hidden_dim x source_length
+        q = self.project_query(query).unsqueeze(2)  # batch, dim, 1
+        e = self.project_ref(ref)  # batch_size, hidden_dim, source_length
         # expand the query by source_length
-        # batch x dim x source_length
+        # batch, dim, source_length
         expanded_q = q.repeat(1, 1, e.size(2))
         # batch x 1 x hidden_dim
-        v_view = self.v.unsqueeze(0).expand(
-            expanded_q.size(0), len(self.v)).unsqueeze(1)
+        v_view = self.v.unsqueeze(0).expand(expanded_q.size(0), len(self.v)).unsqueeze(1)
         # [batch_size x 1 x hidden_dim] * [batch_size x hidden_dim x source_length]
         u = torch.bmm(v_view, self.tanh(expanded_q + e)).squeeze(1)
         if self.use_tanh:
@@ -129,8 +125,7 @@ class Decoder(nn.Module):
         # Or, allow re-selection and penalize in the objective function
         if prev_idxs is not None:
             # set most recently selected idx values to 1
-            maskk[[x for x in range(logits.size(0))],
-                  prev_idxs.data] = 1
+            maskk[[x for x in range(logits.size(0))], prev_idxs.data] = 1
             logits[maskk] = -np.inf
         return logits, maskk
 
@@ -138,27 +133,27 @@ class Decoder(nn.Module):
         """
         Args:
             decoder_input: The initial input to the decoder
-                size is [batch_size x embedding_dim]. Trainable parameter.
-            embedded_inputs: [source_length x batch_size x embedding_dim]
-            hidden: the prev hidden state, size is [batch_size x hidden_dim]. 
+                size is [batch_size, embedding_dim]. Trainable parameter.
+            embedded_inputs: [source_length, batch_size, embedding_dim]
+            hidden: the prev hidden state, size is [batch_size, hidden_dim].
                 Initially this is set to (enc_h[-1], enc_c[-1])
-            context: encoder outputs, [source_length x batch_size x hidden_dim]
+            context: encoder outputs, [source_length, batch_size, hidden_dim]
         """
 
         def recurrence(x, hidden, logit_mask, prev_idxs, step):
 
-            hx, cx = hidden  # batch_size x hidden_dim
+            hx, cx = hidden  # batch_size, hidden_dim
 
             gates = self.input_weights(x) + self.hidden_weights(hx)
-            ingate, forgetgate, cellgate, outgate = gates.chunk(4, 1)
+            in_gate, forget_gate, cell_gate, out_gate = gates.chunk(4, 1)
 
-            ingate = F.sigmoid(ingate)
-            forgetgate = F.sigmoid(forgetgate)
-            cellgate = F.tanh(cellgate)
-            outgate = F.sigmoid(outgate)
+            in_gate = F.sigmoid(in_gate)
+            forget_gate = F.sigmoid(forget_gate)
+            cell_gate = F.tanh(cell_gate)
+            out_gate = F.sigmoid(out_gate)
 
-            cy = (forgetgate * cx) + (ingate * cellgate)
-            hy = outgate * F.tanh(cy)  # batch_size x hidden_dim
+            cy = (forget_gate * cx) + (in_gate * cell_gate)
+            hy = out_gate * F.tanh(cy)  # batch_size x hidden_dim
 
             g_l = hy
             for i in range(self.n_glimpses):
